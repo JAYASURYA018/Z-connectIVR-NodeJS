@@ -7,14 +7,14 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 const port = 5000;
-const db = require('./db');  
+const db = require('./db');
 const { Pool } = require('pg');
 const { Client } = require('ssh2');
 const ftp = require('basic-ftp');
 
 app.use(express.json());
 app.use(cors());
-app.use(bodyParser.json()); 
+app.use(bodyParser.json());
 const connection = db.connection;
 
 
@@ -29,7 +29,7 @@ const pgPool = new Pool({
 
 
 app.get('/', (req, res) => {
-    res.send("Hello Node.js application"); 
+    res.send("Hello Node.js application");
 });
 
 app.post('/Menunode', async (req, res) => {
@@ -38,7 +38,7 @@ app.post('/Menunode', async (req, res) => {
 
     console.log("ID ::", id, "Menuname ::", Menuname, "TexttoSay ::", TexttoSay, "Channel ::", Channel, "Menu options ::", menuoptions);
 
-  
+
     try {
         const results = await pgPool.query('SELECT * FROM MenuNode WHERE id = $1', [id]);
         console.log("Results ::", results.rows);
@@ -69,10 +69,10 @@ app.post('/save-flow', async (req, res) => {
     const generatedJSCode = generateJSCode(lastData);
     console.log("Generated JS Code :: ", generatedJSCode);
 
-   
+
 
     try {
-        if(flowName === ""){
+        if (flowName === "") {
             console.log("The flow name is empty")
             res.status(500).json({ error: 'Failed to save JavaScript code' });
         } else {
@@ -80,11 +80,11 @@ app.post('/save-flow', async (req, res) => {
             const query = 'INSERT INTO Zconnectflow (flowName, jsCode) VALUES ($1, $2) RETURNING id';
             const values = [flowName, Buffer.from(generatedJSCode, 'utf-8')];
             console.log("Values", values);
-    
+
             const result = await client.query(query, values);
             client.release();
             console.log("Result ::", result);
-    
+
             if (result.rows.length > 0) {
                 const newId = result.rows[0].id;
                 res.status(200).json({ message: 'JavaScript code saved successfully', id: newId, content: generatedJSCode });
@@ -92,7 +92,7 @@ app.post('/save-flow', async (req, res) => {
                 res.status(500).json({ error: 'Failed to save JavaScript code' });
             }
         }
-    
+
     } catch (error) {
         console.error('Error saving JavaScript code:', error);
         res.status(500).json({ error: 'Failed to save JavaScript code' });
@@ -124,87 +124,87 @@ app.post('/check-flow-name', async (req, res) => {
 
 app.post('/deploy', async (req, res) => {
     const { flowName } = req.body;
-    console.log("Request body :: ",req.body)
+    console.log("Request body :: ", req.body)
     console.log('Deploying flow with name:', flowName);
 
     try {
-       if(flowName === ""){
-        console.log("The flow name is empty ")
-        res.status(500).json({ message: 'Failed to deploy flow' });
-       }else {
-        const result = await pgPool.query('SELECT jscode FROM Zconnectflow WHERE flowname = $1', [flowName]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Flow not found' });
-        }
+        if (flowName === "") {
+            console.log("The flow name is empty ")
+            res.status(500).json({ message: 'Failed to deploy flow' });
+        } else {
+            const result = await pgPool.query('SELECT jscode FROM Zconnectflow WHERE flowname = $1', [flowName]);
+            if (result.rows.length === 0) {
+                return res.status(404).json({ message: 'Flow not found' });
+            }
 
-        console.log('Retrieved flow from the database');
+            console.log('Retrieved flow from the database');
 
-        const jsCodeBuffer = result.rows[0].jscode;
+            const jsCodeBuffer = result.rows[0].jscode;
 
-        const conn = new Client();
-        conn.on('ready', () => {
-            console.log('Client :: ready');
-            conn.sftp((err, sftp) => {
-                if (err) throw err;
+            const conn = new Client();
+            conn.on('ready', () => {
+                console.log('Client :: ready');
+                conn.sftp((err, sftp) => {
+                    if (err) throw err;
 
-                const remotePath = `/etc/zconnectivr/scripts/${flowName}.js`;
-                console.log("Remote path ::", remotePath);
-                sftp.writeFile(remotePath, jsCodeBuffer, (err) => {
-                    if (err) {
-                        console.error('SFTP error:', err);
-                        res.status(500).json({ message: 'Failed to upload file via SFTP' });
-                    } else {
-                        console.log('File uploaded successfully');
+                    const remotePath = `/etc/zconnectivr/scripts/${flowName}.js`;
+                    console.log("Remote path ::", remotePath);
+                    sftp.writeFile(remotePath, jsCodeBuffer, (err) => {
+                        if (err) {
+                            console.error('SFTP error:', err);
+                            res.status(500).json({ message: 'Failed to upload file via SFTP' });
+                        } else {
+                            console.log('File uploaded successfully');
 
-                    
-                        const xmlPath = '/etc/zconnectivr/dialplan/default.xml';
-                        sftp.readFile(xmlPath, 'utf8', (err, data) => {
-                            console.log("Data in 138 line ::",data)
-                            let updatedXml;
-                            if (err && err.code === 'ENOENT') {
-                         
-                                console.log('Dialplan XML does not exist. Creating new file.');
-                                updatedXml = `
+
+                            const xmlPath = '/etc/zconnectivr/dialplan/default.xml';
+                            sftp.readFile(xmlPath, 'utf8', (err, data) => {
+                                console.log("Data in 138 line ::", data)
+                                let updatedXml;
+                                if (err && err.code === 'ENOENT') {
+
+                                    console.log('Dialplan XML does not exist. Creating new file.');
+                                    updatedXml = `
     <include>
         <extension name="${flowName}">
         </extension>
     </include>`;
-                            } else if (err) {
-                                console.error('Error reading XML file:', err);
-                                return res.status(500).json({ message: 'Failed to read dialplan XML' });
-                            } else {
-                                const newExtension = `\n<extension name="${flowName}">\n</extension>\n`;
-                                if (data.includes('</include>')) {
-                                    updatedXml = data.replace('\n</include>', `${newExtension}</include>\n`);
+                                } else if (err) {
+                                    console.error('Error reading XML file:', err);
+                                    return res.status(500).json({ message: 'Failed to read dialplan XML' });
                                 } else {
-                                  
-                                    updatedXml = data + `<include>\n${newExtension}</include>\n`;
-                                }
-                            }
+                                    const newExtension = `\n<extension name="${flowName}">\n</extension>\n`;
+                                    if (data.includes('</include>')) {
+                                        updatedXml = data.replace('\n</include>', `${newExtension}</include>\n`);
+                                    } else {
 
-                            sftp.writeFile(xmlPath, updatedXml, 'utf8', (err) => {
-                                if (err) {
-                                    console.error('Error writing XML file:', err);
-                                    res.status(500).json({ message: 'Failed to update dialplan XML' });
-                                } else {
-                                    console.log('Dialplan XML updated successfully');
-                                    res.status(200).json({ message: 'Flow deployed and dialplan XML updated successfully' });
+                                        updatedXml = data + `<include>\n${newExtension}</include>\n`;
+                                    }
                                 }
-                                conn.end();
+
+                                sftp.writeFile(xmlPath, updatedXml, 'utf8', (err) => {
+                                    if (err) {
+                                        console.error('Error writing XML file:', err);
+                                        res.status(500).json({ message: 'Failed to update dialplan XML' });
+                                    } else {
+                                        console.log('Dialplan XML updated successfully');
+                                        res.status(200).json({ message: 'Flow deployed and dialplan XML updated successfully' });
+                                    }
+                                    conn.end();
+                                });
                             });
-                        });
-                    }
+                        }
+                    });
                 });
+            }).connect({
+                host: '10.16.7.11',
+                port: 22,
+                username: 'cust',
+                password: 'Zeniusit@123'
             });
-        }).connect({
-            host: '10.16.7.11',
-            port: 22,
-            username: 'cust',
-            password: 'Zeniusit@123'
-        });
 
-       }
-       
+        }
+
     } catch (error) {
         console.error('Error deploying flow:', error);
         res.status(500).json({ message: 'Failed to deploy flow' });
@@ -214,29 +214,31 @@ app.post('/deploy', async (req, res) => {
 const retrieveCode = async (flowName) => {
 
     try {
-      const query = 'SELECT jsCode FROM Zconnectflow WHERE flowName = $1';
-      const values = [flowName];
-  
-      const res = await pgPool.query(query, values);
-      if (res.rows.length > 0) {
-        const jsCode = res.rows[0].jscode.toString('utf-8');
-        console.log('JavaScript Code which retrived from PostgreSQL', jsCode);
-        return jsCode;
-      } else {
-        console.log('No code found for the given flow name');
-        return null;
-      }
+        const query = 'SELECT jsCode FROM Zconnectflow WHERE flowName = $1';
+        const values = [flowName];
+
+        const res = await pgPool.query(query, values);
+        if (res.rows.length > 0) {
+            const jsCode = res.rows[0].jscode.toString('utf-8');
+            console.log('JavaScript Code which retrived from PostgreSQL', jsCode);
+            return jsCode;
+        } else {
+            console.log('No code found for the given flow name');
+            return null;
+        }
     } catch (err) {
-      console.error('Error retrieving code:', err);
-      throw err;
+        console.error('Error retrieving code:', err);
+        throw err;
     }
-  };
-  
-  retrieveCode('zenius demo');
+};
+
+retrieveCode('zenius demo');
 
 
 
-  function generateJSCode(ivrNodes) {
+function generateJSCode(ivrNodes) {
+    var invalidStatus;
+    var prevNode;
     var jsCode = `var languageCode = "en/us/callie";
     var soundDir = "/usr/local/freeswitch/sounds/";
  
@@ -250,56 +252,67 @@ const retrieveCode = async (flowName) => {
     session.execute("set", "tts_engine=flite");
     session.execute("set", "tts_voice=slt");
 `;
- 
+
     function findNodeByLabel(label) {
         return ivrNodes.find(node => node.sourceLabel === label);
     }
- 
-    function findNodeByType(type) {
-        return ivrNodes.find(node => node.nodeType === type);
-    }
- 
+
     function processNode(node) {
-        var nodeType = node.nodeType;
- 
-        if (nodeType === "Audio") {
-            var audioFile = node.popupDetails?.initialAudio;
-            var TexttoSay = node.popupDetails?.TexttoSay;
-            jsCode += audioFile ? `playFile("${audioFile}");\n` : `session.execute("speak", "${TexttoSay}");\n`;
-            var targetLabel = node.target;
-            var targetNode = findNodeByLabel(targetLabel);
-            processNode(targetNode);
-        } else if (nodeType === "Menu") {
-            var initialAudio = node.popupDetails?.initialAudio;
-            var TexttoSay = node.popupDetails?.TexttoSay;
-            jsCode += initialAudio ? `playFile("${initialAudio}");\n` : `session.execute("speak", "${TexttoSay}");\n`;
-            jsCode += `var digit = session.getDigits(1, "", 3000);\n switch(digit) {\n`;
-            var menuOptions = node.popupDetails.menuoptions;
-            // console.log("menuOptions : ", Object.keys(menuOptions).length);
- 
-            for (let i = 0; i < menuOptions; i++) {
-                jsCode += `    case "${i + 1}":\n`;
-                var targetLabel = Object.values(node.optionsTarget)[i];
-                console.log("targetLabel : ", targetLabel);
+        console.log("node", node);
+        if (!node || node === 'undefined') {
+            invalidStatus = {
+                status: 500,
+                prevNode: prevNode
+            }
+        } else {
+            var nodeType = node.nodeType;
+            if (nodeType === "Audio") {
+                prevNode = node.sourceLabel;
+                var audioFile = node.popupDetails?.initialAudio;
+                var TexttoSay = node.popupDetails?.TexttoSay;
+                jsCode += audioFile ? `playFile("${audioFile}");\n` : `session.execute("speak", "${TexttoSay}");\n`;
+                var targetLabel = node.target;
                 var targetNode = findNodeByLabel(targetLabel);
                 processNode(targetNode);
-                jsCode += `break;\n`;
+            } else if (nodeType === "Menu") {
+                prevNode = node.sourceLabel;
+                var initialAudio = node.popupDetails?.initialAudio;
+                var TexttoSay = node.popupDetails?.TexttoSay;
+                jsCode += initialAudio ? `playFile("${initialAudio}");\n` : `session.execute("speak", "${TexttoSay}");\n`;
+                jsCode += `var digit = session.getDigits(1, "", 3000);\n switch(digit) {\n`;
+                var menuOptions = node.popupDetails.menuoptions;
+                // console.log("menuOptions : ", Object.keys(menuOptions).length);
+
+                for (let i = 0; i < menuOptions; i++) {
+                    jsCode += `    case "${i + 1}":\n`;
+                    var targetLabel = Object.values(node.optionsTarget)[i];
+                    console.log("targetLabel : ", targetLabel);
+                    var targetNode = findNodeByLabel(targetLabel);
+                    processNode(targetNode);
+                    jsCode += `break;\n`;
+                }
+
+                jsCode += `        default:\nplayFile("Invalid.wav");\n}\n`
+            } else if (nodeType === "Hangup") {
+                jsCode += `session.hangup();\n`;
             }
- 
-            jsCode += `        default:\nplayFile("Invalid.wav");\n}\n`
-        } else if (nodeType === "Hangup") {
-            jsCode += `session.hangup();\n`;
         }
+
     }
- 
+
     var startNode = ivrNodes.find(node => node.nodeType === "Start");
     if (startNode) {
         var targetNode = findNodeByLabel(startNode.target);
         if (targetNode) {
             processNode(targetNode);
         }
+    } else {
+        invalidStatus = {
+            status: 500,
+            prevNode: prevNode !== undefined ? prevNode : 'Start'
+        }
     }
- 
+
     return jsCode;
 }
 
