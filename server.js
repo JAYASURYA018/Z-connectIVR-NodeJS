@@ -372,7 +372,7 @@ function generateJSCode(ivrNodes) {
             };
         } else {
             var nodeType = node.nodeType;
-            if (nodeType === "Audio") {
+            if (nodeType === "Play Prompt") {
                 if (!node.hasOwnProperty("popupDetails")) {
                     invalidStatus = {
                         status: 500,
@@ -491,7 +491,7 @@ function generateJSCode(ivrNodes) {
                             jsCode += `}\n`;
                     }
                 }
-            } else if (nodeType === "Application Modifier") {
+            } else if (nodeType === "Session Variable") {
                 id++;
                 if (!node.hasOwnProperty("popupDetails")) {
                     invalidStatus = {
@@ -560,7 +560,7 @@ function generateJSCode(ivrNodes) {
                             processNode(findNodeByLabel(node.target));
                     }
                 }
-            } else if (nodeType === "Hangup") {
+            } else if (nodeType === "Disconnect") {
                 jsCode += `session.hangup();\n`;
             }
         }
